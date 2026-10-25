@@ -3,7 +3,8 @@
 # 🎯 AI Resume Analyser Pro
 ### *Next-Generation NLP & Multi-Engine ATS Resume Intelligence Platform*
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Live Demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-resume-analyser-pro.streamlit.app/)
+[![Python](https://img.shields.io/badge/Python-3.11-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![spaCy](https://img.shields.io/badge/spaCy-NLP-09A3D5.svg?logo=spacy&logoColor=white)](https://spacy.io/)
 [![Plotly](https://img.shields.io/badge/Plotly-Interactive%20Charts-3F4F75.svg?logo=plotly&logoColor=white)](https://plotly.com/)
@@ -14,11 +15,21 @@
   <b>A comprehensive, AI-powered resume parsing and ATS evaluation system designed to extract skills, calculate weighted ATS compatibility scores, detect candidate domain proficiency, and recommend targeted career roadmaps.</b>
 </p>
 
-[Key Features](#-key-features) • [Architecture](#-architecture) • [Live Deployment](#-live-deployment) • [Getting Started](#-getting-started) • [Admin Dashboard](#-admin-dashboard) • [Contact](#-author)
+🔗 **Live Application URL:** [**https://ai-resume-analyser-pro.streamlit.app/**](https://ai-resume-analyser-pro.streamlit.app/)
+
+[Live Demo](#-live-demo) • [Key Features](#-key-features) • [Architecture](#-architecture) • [Getting Started](#-getting-started) • [Admin Dashboard](#-admin-dashboard) • [Contact](#-author)
 
 ---
 
 </div>
+
+## 🌐 Live Demo
+
+The application is deployed live and publicly accessible on Streamlit Community Cloud:
+
+👉 **[https://ai-resume-analyser-pro.streamlit.app/](https://ai-resume-analyser-pro.streamlit.app/)**
+
+---
 
 ## 🌟 Key Features
 
@@ -69,24 +80,10 @@ flowchart TD
 
 ---
 
-## 🚀 Live Deployment
-
-You can deploy this application for free on **Streamlit Community Cloud**:
-
-1. Fork or push this repository to your GitHub account (`ahadahmed123456789/ai-resume-analyser-pro`).
-2. Visit [share.streamlit.io](https://share.streamlit.io/) and log in with GitHub.
-3. Click **"New App"** and select:
-   - **Repository:** `ahadahmed123456789/ai-resume-analyser-pro`
-   - **Branch:** `main`
-   - **Main file path:** `app.py`
-4. Click **"Deploy"**! Streamlit will automatically install dependencies from `requirements.txt` and launch the app.
-
----
-
 ## 💻 Getting Started
 
 ### Prerequisites
-- Python 3.10 or higher
+- Python 3.11 (recommended) or 3.10
 - Git
 
 ### 1. Clone the Repository
@@ -162,6 +159,7 @@ ai-resume-analyser-pro/
 ## 👤 Author
 
 **Ahad Ahmed**
+- **Live App:** [ai-resume-analyser-pro.streamlit.app](https://ai-resume-analyser-pro.streamlit.app/)
 - **Portfolio:** [ahadahmed.is-a.dev](https://ahadahmed.is-a.dev)
 - **GitHub:** [@ahadahmed123456789](https://github.com/ahadahmed123456789)
 - **Email:** [ahadahmed786921@gmail.com](mailto:ahadahmed786921@gmail.com)
