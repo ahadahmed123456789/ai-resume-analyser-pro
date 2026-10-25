@@ -17,6 +17,10 @@
 
 🔗 **Live Application URL:** [**https://ai-resume-analyser-pro.streamlit.app/**](https://ai-resume-analyser-pro.streamlit.app/)
 
+<p align="center">
+  <img src="demo.png" alt="AI Resume Analyser Pro Live Preview" width="100%" style="border-radius: 12px; border: 1px solid #1e2235;">
+</p>
+
 [Live Demo](#-live-demo) • [Key Features](#-key-features) • [Architecture](#-architecture) • [Getting Started](#-getting-started) • [Admin Dashboard](#-admin-dashboard) • [Contact](#-author)
 
 ---
@@ -138,6 +142,7 @@ ai-resume-analyser-pro/
 ├── requirements.txt        # Python dependency manifest
 ├── LICENSE                 # MIT License
 ├── README.md               # Project documentation
+├── demo.png                # Live application preview
 ├── Uploaded_Resumes/       # Local temporary storage for uploaded resumes
 └── resume_pro.db           # SQLite database (auto-generated at runtime)
 ```
