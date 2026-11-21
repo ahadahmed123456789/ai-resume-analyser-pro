@@ -13,7 +13,7 @@
 
 import streamlit as st
 import pandas as pd
-import base64, random, time, datetime, io, os, re, sqlite3, json
+import base64, random, time, datetime, io, os, re, sqlite3, json, hashlib
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -148,23 +148,101 @@ def init_db():
             Actual_skills       TEXT,
             Recommended_skills  TEXT,
             Recommended_courses TEXT,
-            skills_count        INTEGER
+            skills_count        INTEGER,
+            resume_hash         TEXT
         )
+    """)
+
+    # ── Migration for databases created before the dedupe feature ──
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(user_data)")]
+    if "resume_hash" not in cols:
+        conn.execute("ALTER TABLE user_data ADD COLUMN resume_hash TEXT")
+
+    # One-time cleanup of old duplicates. Old rows have no hash, so identify
+    # the same candidate by email; if no email was found, fall back to
+    # name + skills + page count. Keeps the newest row of each group.
+    conn.execute("""
+        DELETE FROM user_data
+        WHERE resume_hash IS NULL
+          AND ID NOT IN (
+              SELECT MAX(ID) FROM user_data
+              WHERE resume_hash IS NULL
+              GROUP BY CASE
+                  WHEN IFNULL(Email_ID,'Not found') = 'Not found'
+                  THEN IFNULL(Name,'') || '|' || IFNULL(Actual_skills,'') || '|' || IFNULL(Page_no,'')
+                  ELSE Email_ID
+              END
+          )
+    """)
+
+    # The unique index is what guarantees "stored once" at the database level.
+    # SQLite allows many NULLs in a unique index, so legacy rows are unaffected.
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_data_resume_hash
+        ON user_data(resume_hash)
     """)
     conn.commit(); conn.close()
 
+def make_resume_hash(raw_text):
+    """Fingerprint of the resume's CONTENT (not file name or PDF metadata),
+    so re-uploading the same resume, even re-exported, gives the same hash."""
+    normalized = re.sub(r'[-]', ' ', raw_text)      # icon glyphs
+    normalized = re.sub(r'\s+', ' ', normalized).strip().lower()  # whitespace/case
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
 def insert_data(name, email, res_score, ats_score, timestamp, no_pages,
-                field, level, skills, rec_skills, courses):
+                field, level, skills, rec_skills, courses, resume_hash):
+    """Insert a new record, or refresh the existing one if this resume was
+    already saved. Returns True if a new row was created, False if updated."""
     conn = get_conn()
+    existed = conn.execute(
+        "SELECT 1 FROM user_data WHERE resume_hash = ?", (resume_hash,)
+    ).fetchone() is not None
+
+    # Rows saved by the old version have no hash. If this resume belongs to
+    # one of them, adopt that row (stamp it with the hash) instead of adding
+    # a second row next to it.
+    if not existed:
+        if email and email != "Not found":
+            legacy = conn.execute(
+                "SELECT ID FROM user_data WHERE resume_hash IS NULL "
+                "AND Email_ID = ? ORDER BY ID DESC", (email,)).fetchall()
+        else:
+            legacy = conn.execute(
+                "SELECT ID FROM user_data WHERE resume_hash IS NULL "
+                "AND Name = ? AND Actual_skills = ? AND Page_no = ? ORDER BY ID DESC",
+                (name, str(skills), str(no_pages))).fetchall()
+        if legacy:
+            conn.execute("UPDATE user_data SET resume_hash = ? WHERE ID = ?",
+                         (resume_hash, legacy[0][0]))
+            for (old_id,) in legacy[1:]:
+                conn.execute("DELETE FROM user_data WHERE ID = ?", (old_id,))
+            existed = True
+
     conn.execute("""
         INSERT INTO user_data
         (Name,Email_ID,resume_score,ats_score,Timestamp,Page_no,
          Predicted_Field,User_level,Actual_skills,Recommended_skills,
-         Recommended_courses,skills_count)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+         Recommended_courses,skills_count,resume_hash)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(resume_hash) DO UPDATE SET
+            Name=excluded.Name,
+            Email_ID=excluded.Email_ID,
+            resume_score=excluded.resume_score,
+            ats_score=excluded.ats_score,
+            Timestamp=excluded.Timestamp,
+            Page_no=excluded.Page_no,
+            Predicted_Field=excluded.Predicted_Field,
+            User_level=excluded.User_level,
+            Actual_skills=excluded.Actual_skills,
+            Recommended_skills=excluded.Recommended_skills,
+            Recommended_courses=excluded.Recommended_courses,
+            skills_count=excluded.skills_count
     """, (name, email, res_score, ats_score, timestamp, str(no_pages),
-          field, level, str(skills), str(rec_skills), str(courses), len(skills)))
+          field, level, str(skills), str(rec_skills), str(courses), len(skills),
+          resume_hash))
     conn.commit(); conn.close()
+    return not existed
 
 # ══════════════════════════════════════════════════
 # PDF UTILITIES
@@ -872,7 +950,8 @@ if "👤" in mode:
             data['name'], data['email'], sec_score, ats, ts, pages,
             field or "Unknown", cand_level, data['skills'],
             missing_core[:8] if field else [],
-            [c for c,_ in (FIELD_PROFILES[field]["courses"] if field else [])[:5]]
+            [c for c,_ in (FIELD_PROFILES[field]["courses"] if field else [])[:5]],
+            make_resume_hash(raw)
         )
 
 # ══════════════════════════════════════════════════

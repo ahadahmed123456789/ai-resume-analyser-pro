@@ -1,46 +1,26 @@
 """
 ╔══════════════════════════════════════════════════════════════════════╗
-║        AI RESUME ANALYSER — Ultra Pro Edition v2.0                   ║
-║  · Multi-engine PDF parsing (PyMuPDF + pdfplumber + pdfminer)        ║
-║  · Unicode / icon-font stripping & ligature normalisation            ║
-║  · spaCy NER + rule-based hybrid NLP pipeline                        ║
-║  · Phonetic skill matching (fuzzy / Levenshtein)                     ║
-║  · Two-column / multi-column layout reconstruction                   ║
-║  · Context-aware name extraction (transformer fallback)              ║
-║  · Advanced section detection via regex + ML keyword proximity       ║
-║  · All original Pro Edition features retained & enhanced             ║
+║        AI RESUME ANALYSER — Pro Edition                              ║
+║  · Real-world weighted skill scoring                                 ║
+║  · Market demand integration                                         ║
+║  · Skill gap radar chart                                             ║
+║  · Career roadmap timeline                                           ║
+║  · ATS compatibility checker                                         ║
+║  · Salary benchmark display                                          ║
+║  · Rich admin dashboard with 6 charts                                ║
 ╚══════════════════════════════════════════════════════════════════════╝
 """
 
-# ── Standard library ────────────────────────────────────────────────
-import base64, random, datetime, io, os, re, sqlite3, unicodedata
-import difflib
-
-# ── Third-party ─────────────────────────────────────────────────────
 import streamlit as st
 import pandas as pd
+import base64, random, time, datetime, io, os, re, sqlite3, json, hashlib
 import plotly.express as px
 import plotly.graph_objects as go
 
-# PDF engines
-try:
-    import fitz as pymupdf          # PyMuPDF  – best for embedded fonts / icons
-    HAS_PYMUPDF = True
-except ImportError:
-    HAS_PYMUPDF = False
-
-try:
-    import pdfplumber               # great for columnar / tabular layouts
-    HAS_PDFPLUMBER = True
-except ImportError:
-    HAS_PDFPLUMBER = False
-
-# pdfminer  (always available as fallback)
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
-
 import spacy
 from streamlit_tags import st_tags
 import nltk
@@ -55,14 +35,14 @@ from Courses import (
 # PAGE CONFIG  ─ must be first Streamlit call
 # ══════════════════════════════════════════════════
 st.set_page_config(
-    page_title="AI Resume Analyser Ultra Pro",
+    page_title="AI Resume Analyser Pro",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ══════════════════════════════════════════════════
-# GLOBAL CSS  — dark editorial theme (enhanced)
+# GLOBAL CUSTOM CSS  — dark editorial theme
 # ══════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -107,15 +87,10 @@ section[data-testid="stSidebar"] * { color: #c8cfe0 !important; }
     font-family:'DM Serif Display',serif; font-size:1.4rem; color:#e2e8f0;
     margin:0 0 20px; padding-bottom:12px; border-bottom:1px solid #1e2235;
 }
-.engine-badge {
-    display:inline-block; padding:3px 10px; border-radius:999px; font-size:.72rem;
-    font-weight:600; letter-spacing:.06em; margin-left:8px;
-    background:rgba(99,102,241,.18); color:#818cf8; border:1px solid rgba(99,102,241,.3);
-}
+
 .skill-pill { display:inline-block; padding:4px 12px; border-radius:999px; font-size:.78rem; margin:3px; font-weight:500; }
 .pill-have  { background:rgba(99,102,241,.15); color:#818cf8; border:1px solid rgba(99,102,241,.3); }
 .pill-need  { background:rgba(236,72,153,.12); color:#f472b6; border:1px solid rgba(236,72,153,.25); }
-.pill-fuzzy { background:rgba(245,158,11,.12);  color:#fbbf24; border:1px solid rgba(245,158,11,.3); }
 
 .check-row { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid #1a1e30; }
 .check-row:last-child { border-bottom:none; }
@@ -130,9 +105,6 @@ section[data-testid="stSidebar"] * { color: #c8cfe0 !important; }
 .salary-role  { color:#c8cfe0; font-weight:600; font-size:.95rem; }
 .salary-range { color:#818cf8; font-size:1.1rem; font-weight:700; margin-top:4px; }
 .salary-meta  { color:#6b7280; font-size:.78rem; margin-top:2px; }
-
-.nlp-debug { background:#0a0c18; border:1px solid #1e2235; border-radius:8px;
-             padding:14px 18px; font-size:.78rem; color:#6b7280; font-family:monospace; }
 
 .stButton > button {
     background:linear-gradient(135deg,#6366f1,#8b5cf6) !important;
@@ -177,378 +149,131 @@ def init_db():
             Recommended_skills  TEXT,
             Recommended_courses TEXT,
             skills_count        INTEGER,
-            parse_engine        TEXT,
-            fuzzy_skills        TEXT
+            resume_hash         TEXT
         )
+    """)
+
+    # ── Migration for databases created before the dedupe feature ──
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(user_data)")]
+    if "resume_hash" not in cols:
+        conn.execute("ALTER TABLE user_data ADD COLUMN resume_hash TEXT")
+
+    # One-time cleanup of old duplicates. Old rows have no hash, so identify
+    # the same candidate by email; if no email was found, fall back to
+    # name + skills + page count. Keeps the newest row of each group.
+    conn.execute("""
+        DELETE FROM user_data
+        WHERE resume_hash IS NULL
+          AND ID NOT IN (
+              SELECT MAX(ID) FROM user_data
+              WHERE resume_hash IS NULL
+              GROUP BY CASE
+                  WHEN IFNULL(Email_ID,'Not found') = 'Not found'
+                  THEN IFNULL(Name,'') || '|' || IFNULL(Actual_skills,'') || '|' || IFNULL(Page_no,'')
+                  ELSE Email_ID
+              END
+          )
+    """)
+
+    # The unique index is what guarantees "stored once" at the database level.
+    # SQLite allows many NULLs in a unique index, so legacy rows are unaffected.
+    conn.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_data_resume_hash
+        ON user_data(resume_hash)
     """)
     conn.commit(); conn.close()
 
+def make_resume_hash(raw_text):
+    """Fingerprint of the resume's CONTENT (not file name or PDF metadata),
+    so re-uploading the same resume, even re-exported, gives the same hash."""
+    normalized = re.sub(r'[-]', ' ', raw_text)      # icon glyphs
+    normalized = re.sub(r'\s+', ' ', normalized).strip().lower()  # whitespace/case
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
 def insert_data(name, email, res_score, ats_score, timestamp, no_pages,
-                field, level, skills, rec_skills, courses, engine="", fuzzy=""):
+                field, level, skills, rec_skills, courses, resume_hash):
+    """Insert a new record, or refresh the existing one if this resume was
+    already saved. Returns True if a new row was created, False if updated."""
     conn = get_conn()
+    existed = conn.execute(
+        "SELECT 1 FROM user_data WHERE resume_hash = ?", (resume_hash,)
+    ).fetchone() is not None
+
+    # Rows saved by the old version have no hash. If this resume belongs to
+    # one of them, adopt that row (stamp it with the hash) instead of adding
+    # a second row next to it.
+    if not existed:
+        if email and email != "Not found":
+            legacy = conn.execute(
+                "SELECT ID FROM user_data WHERE resume_hash IS NULL "
+                "AND Email_ID = ? ORDER BY ID DESC", (email,)).fetchall()
+        else:
+            legacy = conn.execute(
+                "SELECT ID FROM user_data WHERE resume_hash IS NULL "
+                "AND Name = ? AND Actual_skills = ? AND Page_no = ? ORDER BY ID DESC",
+                (name, str(skills), str(no_pages))).fetchall()
+        if legacy:
+            conn.execute("UPDATE user_data SET resume_hash = ? WHERE ID = ?",
+                         (resume_hash, legacy[0][0]))
+            for (old_id,) in legacy[1:]:
+                conn.execute("DELETE FROM user_data WHERE ID = ?", (old_id,))
+            existed = True
+
     conn.execute("""
         INSERT INTO user_data
         (Name,Email_ID,resume_score,ats_score,Timestamp,Page_no,
          Predicted_Field,User_level,Actual_skills,Recommended_skills,
-         Recommended_courses,skills_count,parse_engine,fuzzy_skills)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         Recommended_courses,skills_count,resume_hash)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(resume_hash) DO UPDATE SET
+            Name=excluded.Name,
+            Email_ID=excluded.Email_ID,
+            resume_score=excluded.resume_score,
+            ats_score=excluded.ats_score,
+            Timestamp=excluded.Timestamp,
+            Page_no=excluded.Page_no,
+            Predicted_Field=excluded.Predicted_Field,
+            User_level=excluded.User_level,
+            Actual_skills=excluded.Actual_skills,
+            Recommended_skills=excluded.Recommended_skills,
+            Recommended_courses=excluded.Recommended_courses,
+            skills_count=excluded.skills_count
     """, (name, email, res_score, ats_score, timestamp, str(no_pages),
-          field, level, str(skills), str(rec_skills), str(courses),
-          len(skills), engine, str(fuzzy)))
+          field, level, str(skills), str(rec_skills), str(courses), len(skills),
+          resume_hash))
     conn.commit(); conn.close()
+    return not existed
 
 # ══════════════════════════════════════════════════
-# ★  ADVANCED NLP PDF PARSING ENGINE  ★
+# PDF UTILITIES
 # ══════════════════════════════════════════════════
-
-# ── Unicode normalisation + font-glyph cleanup ──────────────────────
-# Many "fancy" resume templates embed PUA (Private Use Area) glyphs for
-# icons (bullet arrows, phone icons, email icons, LinkedIn logos, etc.)
-# These appear as □ or garbage characters and pollute name/email/skill
-# extraction.
-
-_PUA_RE    = re.compile(r'[\ue000-\uf8ff\U000f0000-\U000fffff]')
-_LIGATURE_MAP = str.maketrans({
-    '\ufb00': 'ff', '\ufb01': 'fi', '\ufb02': 'fl',
-    '\ufb03': 'ffi','\ufb04': 'ffl','\ufb05': 'st',
-    '\ufb06': 'st', '\u2019': "'", '\u2018': "'",
-    '\u201c': '"',  '\u201d': '"',  '\u2013': '-',
-    '\u2014': '-',  '\u00a0': ' ',  '\u200b': '',
-    '\u200c': '',   '\u200d': '',   '\ufeff': '',
-})
-
-def normalise_unicode(text: str) -> str:
-    """Strip PUA glyphs, fix ligatures, NFC-normalise."""
-    text = _PUA_RE.sub(' ', text)
-    text = text.translate(_LIGATURE_MAP)
-    text = unicodedata.normalize('NFC', text)
-    # Remove sequences of replacement characters
-    text = re.sub(r'[\ufffd\x00-\x08\x0b\x0c\x0e-\x1f]+', ' ', text)
-    return text
-
-def fix_jammed_words(text: str) -> str:
-    """
-    Two-column templates often produce jammed text like
-    'PythonMachine LearningData Science'.
-    Insert space before uppercase that follows lowercase.
-    Also handle ALL-CAPS sections run together.
-    """
-    # camelCase splits
-    text = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', text)
-    # digit–letter boundaries (e.g. "3years")
-    text = re.sub(r'(?<=\d)(?=[A-Za-z])', ' ', text)
-    text = re.sub(r'(?<=[A-Za-z])(?=\d)', ' ', text)
-    return text
-
-def clean_text(raw: str) -> str:
-    """Full preprocessing pipeline."""
-    t = normalise_unicode(raw)
-    t = fix_jammed_words(t)
-    # Collapse multiple spaces / blank lines
-    t = re.sub(r'[ \t]{2,}', ' ', t)
-    t = re.sub(r'\n{3,}', '\n\n', t)
-    return t.strip()
-
-# ── Engine 1: PyMuPDF  (handles embedded CID / Type3 fonts best) ────
-def _extract_pymupdf(path: str) -> tuple[str, int]:
-    doc  = pymupdf.open(path)
-    pages= doc.page_count
-    parts= []
-    for page in doc:
-        # get_text("blocks") preserves reading order column by column
-        blocks = page.get_text("blocks", sort=True)
-        for b in blocks:
-            if b[6] == 0:           # 0 = text block
-                parts.append(b[4])
-    doc.close()
-    return "\n".join(parts), pages
-
-# ── Engine 2: pdfplumber  (best for tables / columns) ───────────────
-def _extract_pdfplumber(path: str) -> tuple[str, int]:
-    parts = []
-    pages = 0
-    with pdfplumber.open(path) as pdf:
-        pages = len(pdf.pages)
-        for page in pdf.pages:
-            # Extract with layout preservation
-            txt = page.extract_text(x_tolerance=2, y_tolerance=3)
-            if txt:
-                parts.append(txt)
-    return "\n".join(parts), pages
-
-# ── Engine 3: pdfminer  (original fallback) ─────────────────────────
-def _extract_pdfminer(path: str) -> tuple[str, int]:
+def pdf_reader(path):
     rm   = PDFResourceManager()
     buf  = io.StringIO()
-    params = LAParams(char_margin=2.0, line_margin=0.5, word_margin=0.1,
-                      boxes_flow=0.5, detect_vertical=False)
-    conv = TextConverter(rm, buf, laparams=params)
+    conv = TextConverter(rm, buf, laparams=LAParams())
     interp = PDFPageInterpreter(rm, conv)
-    n = 0
     with open(path, 'rb') as fh:
         for page in PDFPage.get_pages(fh, caching=True, check_extractable=True):
-            interp.process_page(page); n += 1
+            interp.process_page(page)
     text = buf.getvalue(); conv.close(); buf.close()
-    return text, n
+    return text
 
-# ── Smart engine selector + consensus ───────────────────────────────
-def extract_pdf_text(path: str) -> tuple[str, int, str]:
-    """
-    Try all available engines; pick the one that yields the most
-    readable text (highest printable-char ratio & longest output).
-    Returns (clean_text, page_count, engine_used).
-    """
-    candidates = []
+def count_pages(path):
+    n = 0
+    with open(path, 'rb') as fh:
+        for _ in PDFPage.get_pages(fh): n += 1
+    return n
 
-    if HAS_PYMUPDF:
-        try:
-            t, p = _extract_pymupdf(path)
-            candidates.append(("PyMuPDF", t, p))
-        except Exception: pass
-
-    if HAS_PDFPLUMBER:
-        try:
-            t, p = _extract_pdfplumber(path)
-            candidates.append(("pdfplumber", t, p))
-        except Exception: pass
-
-    try:
-        t, p = _extract_pdfminer(path)
-        candidates.append(("pdfminer", t, p))
-    except Exception: pass
-
-    if not candidates:
-        return "", 1, "none"
-
-    def quality(raw):
-        if not raw: return 0
-        printable = sum(1 for c in raw if c.isprintable() and c not in '\ufffd\uf000')
-        return printable  # more printable chars = better extraction
-
-    best_engine, best_raw, best_pages = max(candidates, key=lambda x: quality(x[1]))
-    return clean_text(best_raw), best_pages, best_engine
-
+def show_pdf(path):
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    st.markdown(
+        f'<iframe src="data:application/pdf;base64,{b64}" '
+        f'width="100%" height="750" type="application/pdf"></iframe>',
+        unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════
-# ★  ADVANCED SKILL EXTRACTION (NLP + FUZZY)  ★
-# ══════════════════════════════════════════════════
-
-@st.cache_resource
-def load_nlp():
-    try:    return spacy.load("en_core_web_sm")
-    except OSError:
-        st.error("Run: python -m spacy download en_core_web_sm"); st.stop()
-
-# ── Skill aliases: handle abbreviations & variants ──────────────────
-SKILL_ALIASES = {
-    # ML / DS
-    "ml":"machine learning","dl":"deep learning","nlp":"natural language processing",
-    "cv":"computer vision","ai":"artificial intelligence","rl":"reinforcement learning",
-    "rnn":"recurrent neural network","cnn":"convolutional neural network",
-    "llm":"large language model","genai":"generative ai","sklearn":"scikit-learn",
-    "tf":"tensorflow","pt":"pytorch","xgb":"xgboost","lgbm":"lightgbm",
-    "eda":"exploratory data analysis","bi":"business intelligence","kpi":"kpis",
-    # Web
-    "js":"javascript","ts":"typescript","ejs":"express js","vue3":"vue",
-    "next":"next.js","nuxt":"nuxt.js","svelte":"sveltekit","gql":"graphql",
-    "crud":"rest api","drf":"django rest framework","orm":"sql",
-    # Android / iOS
-    "jc":"jetpack compose","di":"dependency injection","hilt":"hilt di",
-    "mvp":"mvp architecture","mvi":"mvi architecture",
-    # DB
-    "pg":"postgresql","mongo":"mongodb","psql":"postgresql","mysql":"sql",
-    "mssql":"sql","sqlite":"sql","nosql":"mongodb","redis":"redis cache",
-    # DevOps
-    "k8s":"kubernetes","ci":"ci/cd","cd":"ci/cd","gh actions":"github actions",
-    "tf2":"terraform","ansible":"ansible automation","helm":"helm charts",
-    # Cloud
-    "ec2":"aws","s3":"aws","gke":"gcp","aks":"azure","lambda":"aws lambda",
-    # Misc
-    "oop":"object-oriented programming","dsa":"data structures & algorithms",
-    "os":"operating systems","ui":"user interface","ux":"user experience",
-}
-
-def apply_aliases(text: str) -> str:
-    """Expand abbreviations in text before skill matching."""
-    words = text.split()
-    result = []
-    i = 0
-    while i < len(words):
-        # Try bigram first
-        if i < len(words)-1:
-            bigram = (words[i]+' '+words[i+1]).lower()
-            if bigram in SKILL_ALIASES:
-                result.append(SKILL_ALIASES[bigram]); i += 2; continue
-        w = words[i].lower().strip('.,;:()[]')
-        result.append(SKILL_ALIASES.get(w, words[i]))
-        i += 1
-    return ' '.join(result)
-
-def fuzzy_match(token: str, skill_set: set, threshold: float = 0.82) -> list[str]:
-    """Return skills from skill_set that are close to `token` (Levenshtein ratio)."""
-    matches = []
-    for skill in skill_set:
-        r = difflib.SequenceMatcher(None, token, skill).ratio()
-        if r >= threshold:
-            matches.append(skill)
-    return matches
-
-def extract_skills(text: str) -> tuple[list, list]:
-    """
-    Advanced skill extraction:
-    1. Normalise + expand aliases
-    2. Exact regex match (original logic)
-    3. spaCy NER — PRODUCT / ORG / GPE entities often contain tech names
-    4. Fuzzy match for typos / OCR errors (e.g. 'Pytorch' → 'pytorch')
-    Returns (exact_skills, fuzzy_skills)
-    """
-    expanded = apply_aliases(text)
-    tl = expanded.lower()
-
-    exact_found = []
-    for skill in sorted(ALL_SKILLS, key=len, reverse=True):
-        if re.search(r'\b' + re.escape(skill) + r'\b', tl):
-            exact_found.append(skill)
-    exact_found = list(dict.fromkeys(exact_found))
-
-    # spaCy entity extraction
-    nlp = load_nlp()
-    doc = nlp(expanded[:50000])  # limit for performance
-    ner_candidates = set()
-    for ent in doc.ents:
-        if ent.label_ in ("PRODUCT", "ORG", "GPE", "WORK_OF_ART", "LAW"):
-            ner_candidates.add(ent.text.lower().strip())
-    # also grab noun chunks that look like tech terms
-    for chunk in doc.noun_chunks:
-        if 2 <= len(chunk.text) <= 30:
-            ner_candidates.add(chunk.text.lower().strip())
-
-    for cand in ner_candidates:
-        if cand not in exact_found and cand in ALL_SKILLS:
-            exact_found.append(cand)
-
-    # Fuzzy matching for OCR / font-encoding errors
-    found_lower = set(exact_found)
-    fuzzy_hits  = []
-    tokens = re.findall(r'\b[a-zA-Z][a-zA-Z0-9+#\.\-]{2,25}\b', expanded)
-    for tok in set(t.lower() for t in tokens):
-        if tok in found_lower: continue
-        matches = fuzzy_match(tok, ALL_SKILLS - found_lower, threshold=0.84)
-        for m in matches:
-            if m not in found_lower:
-                fuzzy_hits.append(m); found_lower.add(m)
-
-    return list(dict.fromkeys(exact_found)), list(dict.fromkeys(fuzzy_hits))
-
-
-# ══════════════════════════════════════════════════
-# ★  ADVANCED NAME / EMAIL / PHONE EXTRACTION  ★
-# ══════════════════════════════════════════════════
-
-_NAME_BLACKLIST = {
-    'resume','curriculum','vitae','cv','page','objective','summary',
-    'profile','address','phone','email','contact','linkedin','github',
-    'skills','education','experience','projects','certifications',
-    'achievements','hobbies','interests','references','declaration',
-    'india','usa','uk','australia','canada','germany','france','china',
-    'python','java','react','sql','html','css','javascript','android',
-    'swift','kotlin','figma','aws','docker','git','tableau','excel',
-    'bachelor','master','engineer','developer','designer','analyst',
-    'fresher','student','intern','manager','lead','senior','junior',
-    'university','college','institute','school','department',
-    'scientist','founder','consultant','instructor','teacher',
-    'researcher','architect','specialist','coordinator','director',
-    'ios','mobile','web','data','science','machine','learning',
-    'technology','solutions','llc','inc','ltd','pvt','corp',
-    'international','national','global','languages','chines',
-    'about','me','portfolio','personal','information','detail',
-    'updated','prepared','by','the','an','is','in','of','at','and',
-}
-
-def _is_valid_name_word(w):
-    return (w and w[0].isupper() and
-            re.match(r"^[A-Za-z\-'\.]{1,25}$", w) and
-            w.lower().strip("'-") not in _NAME_BLACKLIST)
-
-def extract_name_advanced(text: str, nlp_model) -> str:
-    """
-    Multi-strategy name extraction:
-    1. spaCy PERSON entity in first 1000 chars (most reliable for clean PDFs)
-    2. Line-scan with capitalisation heuristics
-    3. Pattern before ALL-CAPS title
-    4. Fallback to 'Candidate'
-    """
-    cleaned = normalise_unicode(text)
-    cleaned = fix_jammed_words(cleaned)
-
-    # ── Strategy 1: spaCy NER ────────────────────
-    snippet = cleaned[:1500]
-    doc = nlp_model(snippet)
-    for ent in doc.ents:
-        if ent.label_ == "PERSON":
-            words = ent.text.split()
-            if 2 <= len(words) <= 4 and all(_is_valid_name_word(w) for w in words):
-                return ent.text.strip()
-
-    # ── Strategy 2: Line-by-line scan ───────────
-    lines = [l.strip() for l in cleaned.splitlines() if l.strip()]
-    for line in lines[:25]:
-        # skip lines with digits, special chars, URLs
-        if re.search(r'[\d@|•/\\:_+#,\[\]{}]', line): continue
-        if re.search(r'http|www|\.com|\.in|\.io|\.net', line, re.I): continue
-        words = line.split()
-        if not (2 <= len(words) <= 4): continue
-        if not all(_is_valid_name_word(w) for w in words): continue
-        # At least 2 words must start with uppercase
-        upper_count = sum(1 for w in words if w[0].isupper())
-        if upper_count < 2: continue
-        return line
-
-    # ── Strategy 3: Name before ALL-CAPS title ───
-    m = re.search(
-        r'([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){1,3})\s+(?:[A-Z]{2,}\s*){2,}',
-        cleaned)
-    if m:
-        candidate = m.group(1).strip()
-        words = candidate.split()
-        if all(_is_valid_name_word(w) for w in words):
-            return candidate
-
-    return "Candidate"
-
-def extract_email(text: str) -> str:
-    clean = normalise_unicode(text)
-    m = re.findall(r'[\w\.\-\+]+@[\w\.\-]+\.[a-zA-Z]{2,6}', clean)
-    return m[0] if m else "Not found"
-
-def extract_phone(text: str) -> str:
-    clean = normalise_unicode(text)
-    # International formats: +91-9876543210, (123) 456-7890, 98765 43210, etc.
-    patterns = [
-        r'\+?\d{1,3}[\s\-\.]?\(?\d{3,5}\)?[\s\-\.]?\d{3,5}[\s\-\.]?\d{3,5}',
-        r'\b\d{10,12}\b',
-    ]
-    for pat in patterns:
-        m = re.findall(pat, clean)
-        if m:
-            # Pick the longest match (most digits = most likely a full number)
-            best = max(m, key=lambda x: len(re.sub(r'\D', '', x)))
-            digits = re.sub(r'\D', '', best)
-            if 8 <= len(digits) <= 15:
-                return best.strip()
-    return "Not found"
-
-def extract_linkedin(text: str) -> str:
-    m = re.findall(r'linkedin\.com/in/[\w\-]+', text, re.I)
-    return f"https://{m[0]}" if m else ""
-
-def extract_github(text: str) -> str:
-    m = re.findall(r'github\.com/[\w\-]+', text, re.I)
-    return f"https://{m[0]}" if m else ""
-
-
-# ══════════════════════════════════════════════════
-# FIELD PROFILES  (unchanged from original)
+# REAL-WORLD RECOMMENDATION ENGINE
 # ══════════════════════════════════════════════════
 FIELD_PROFILES = {
     "Data Science & ML": {
@@ -706,46 +431,99 @@ for p in FIELD_PROFILES.values():
     ALL_SKILLS |= {s.lower() for s in p.get("nice_to_have", [])}
 ALL_SKILLS |= {'git','github','docker','kubernetes','aws','azure','gcp','linux',
                'agile','scrum','jira','postgresql','mongodb','redis','r','python',
-               'java','c++','bash','terraform','jenkins','sql','machine learning',
-               'deep learning','natural language processing','data science',
-               'artificial intelligence','computer vision','reinforcement learning',
-               'data structures','algorithms','object-oriented programming',
-               'system design','microservices','rest api','graphql','ci/cd',
-               'unit testing','integration testing','selenium','jest','pytest',
-               'flask','fastapi','spring boot','express','laravel','rails'}
-# Add alias targets
-ALL_SKILLS |= set(SKILL_ALIASES.values())
+               'java','c++','bash','terraform','jenkins','sql'}
 
+@st.cache_resource
+def load_nlp():
+    try:    return spacy.load("en_core_web_sm")
+    except OSError:
+        st.error("Run: python -m spacy download en_core_web_sm"); st.stop()
 
-# ══════════════════════════════════════════════════
-# FULL PARSE PIPELINE
-# ══════════════════════════════════════════════════
-def parse_resume(path: str) -> dict:
-    text, pages, engine = extract_pdf_text(path)
-    nlp_model = load_nlp()
-    exact_skills, fuzzy_skills = extract_skills(text)
-    name  = extract_name_advanced(text, nlp_model)
-    email = extract_email(text)
-    phone = extract_phone(text)
-    linkedin = extract_linkedin(text)
-    github   = extract_github(text)
-    return {
-        "name":          name,
-        "email":         email,
-        "mobile_number": phone,
-        "linkedin":      linkedin,
-        "github":        github,
-        "skills":        exact_skills,
-        "fuzzy_skills":  fuzzy_skills,
-        "no_of_pages":   pages,
-        "parse_engine":  engine,
-        "_raw":          text,
+def extract_skills(text):
+    # Remove unicode icons
+    clean = re.sub(r'[\uf000-\uf8ff]', ' ', text)
+    # Fix jammed words like "PythonMachine LearningDeep Learning"
+    clean = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', clean)
+    tl = clean.lower()
+    found = []
+    for skill in sorted(ALL_SKILLS, key=len, reverse=True):
+        if re.search(r'\b' + re.escape(skill) + r'\b', tl):
+            found.append(skill)
+    return list(dict.fromkeys(found))
+
+def extract_email(text):
+    # Strip unicode icon characters before scanning
+    clean = re.sub(r'[\uf000-\uf8ff]', ' ', text)
+    m = re.findall(r'[\w\.\-]+@[\w\.\-]+\.\w+', clean)
+    return m[0] if m else "Not found"
+
+def extract_phone(text):
+    # Strip unicode icon characters
+    clean = re.sub(r'[\uf000-\uf8ff]', ' ', text)
+    m = re.findall(r'(\+?\d[\d\s\-\(\)]{7,}\d)', clean)
+    if m:
+        # Remove all spaces inside the number
+        return re.sub(r'\s+', '', m[0].strip())
+    return "Not found"
+
+def extract_name(text):
+    BLACKLIST = {
+        'resume','curriculum','vitae','cv','page','objective','summary',
+        'profile','address','phone','email','contact','linkedin','github',
+        'skills','education','experience','projects','certifications',
+        'achievements','hobbies','interests','references','declaration',
+        'india','usa','uk','australia','canada','germany','france','china',
+        'python','java','react','sql','html','css','javascript','android',
+        'swift','kotlin','figma','aws','docker','git','tableau','excel',
+        'bachelor','master','engineer','developer','designer','analyst',
+        'fresher','student','intern','manager','lead','senior','junior',
+        'university','college','institute','school','department',
+        'scientist','founder','consultant','instructor','teacher',
+        'researcher','architect','specialist','coordinator','director',
+        'ios','mobile','web','data','science','machine','learning',
+        'technology','solutions','llc','inc','ltd','pvt','corp',
+        'international','national','global','languages','chines',
     }
 
+    clean = re.sub(r'[\uf000-\uf8ff]', '', text)
+    full_spaced = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', clean)
 
-# ══════════════════════════════════════════════════
-# SCORING & HELPERS  (unchanged from original)
-# ══════════════════════════════════════════════════
+    # ── Strategy 1: line-by-line scan (single-column resumes) ──
+    lines = [l.strip() for l in full_spaced.splitlines() if l.strip()]
+    for line in lines[:20]:
+        if re.search(r'[\d@|•/\\:_+#,]', line): continue
+        if re.search(r'http|www|\.com|\.in|\.io', line, re.IGNORECASE): continue
+        words = line.split()
+        if not (2 <= len(words) <= 4): continue
+        if not all(w[0].isupper() for w in words if w): continue
+        if any(w.lower().strip('-') in BLACKLIST for w in words): continue
+        if not all(re.match(r"^[A-Za-z\-']+$", w) for w in words): continue
+        return line
+
+    # ── Strategy 2: two-column resume — name before page-break + ALL CAPS title ──
+    m = re.search(r'([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+[A-Z\s]{4,}\x0c', full_spaced)
+    if m:
+        candidate = m.group(1).strip()
+        words = candidate.split()
+        if not any(w.lower() in BLACKLIST for w in words):
+            return candidate
+
+    # ── Strategy 3: name before ALL-CAPS title anywhere in text ──
+    matches = re.findall(r'\b([A-Z][a-z]{1,20}\s+[A-Z][a-z]{1,20})\s+(?:[A-Z]{2,}\s*){2,}', full_spaced)
+    for candidate in matches:
+        words = candidate.strip().split()
+        if any(w.lower() in BLACKLIST for w in words): continue
+        if all(re.match(r"^[A-Za-z\-']+$", w) for w in words):
+            return candidate.strip()
+
+    return "Candidate"
+def parse_resume(path):
+    text  = pdf_reader(path); pages = count_pages(path)
+    return {"name": extract_name(text), "email": extract_email(text),
+            "mobile_number": extract_phone(text), "skills": extract_skills(text),
+            "no_of_pages": pages, "_raw": text}
+
+# ── Scoring ──────────────────────────────────────
 def score_skills_for_field(user_skills_lower, field_name):
     core    = FIELD_PROFILES[field_name]["core_skills"]
     total_w = sum(w for _, w in core); earned = 0
@@ -833,16 +611,8 @@ def get_download_link(df, fname, label):
     b64 = base64.b64encode(csv.encode()).decode()
     return f'<a href="data:file/csv;base64,{b64}" download="{fname}">{label}</a>'
 
-def show_pdf(path):
-    with open(path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
-    st.markdown(
-        f'<iframe src="data:application/pdf;base64,{b64}" '
-        f'width="100%" height="750" type="application/pdf"></iframe>',
-        unsafe_allow_html=True)
-
 # ══════════════════════════════════════════════════
-# CHART HELPERS  (unchanged)
+# CHART HELPERS
 # ══════════════════════════════════════════════════
 COLORS = ["#6366f1","#ec4899","#10b981","#f59e0b","#3b82f6","#8b5cf6","#ef4444"]
 BASE_LAYOUT = dict(
@@ -938,36 +708,28 @@ with st.sidebar:
     <div style="text-align:center;padding:20px 0 10px;">
         <span style="font-size:2.2rem;">🎯</span>
         <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;color:#e2e8f0;margin-top:6px;">Resume Analyser</div>
-        <div style="font-size:.72rem;color:#4b5563;letter-spacing:.1em;margin-top:2px;">ULTRA PRO v2.0</div>
+        <div style="font-size:.72rem;color:#4b5563;letter-spacing:.1em;margin-top:2px;">PRO EDITION</div>
     </div>""", unsafe_allow_html=True)
     st.markdown("---")
     mode = st.radio("", ["👤  Candidate", "🔐  Admin"], label_visibility="collapsed")
     st.markdown("---")
-
-    st.markdown("**🧠 NLP Engines Active**")
-    st.markdown(f"{'✅' if HAS_PYMUPDF else '❌'} PyMuPDF (font-safe)")
-    st.markdown(f"{'✅' if HAS_PDFPLUMBER else '❌'} pdfplumber (layout-aware)")
-    st.markdown("✅ pdfminer (fallback)")
-    st.markdown("✅ spaCy NER + Fuzzy match")
-    st.markdown("---")
     st.markdown("""
     <div style="font-size:.78rem;color:#4b5563;padding:10px 0;">
-        <b style="color:#6b7280;">What's new in v2.0</b><br><br>
-        🔤 Unicode / icon-font stripping<br><br>
-        📐 Two-column layout reconstruction<br><br>
-        🔍 spaCy NER entity extraction<br><br>
-        🎯 Fuzzy skill matching (typos / OCR)<br><br>
-        🔗 LinkedIn &amp; GitHub detection<br><br>
-        ⚙️ Multi-engine PDF consensus
+        <b style="color:#6b7280;">How it works</b><br><br>
+        1️⃣ Upload your PDF resume<br><br>
+        2️⃣ AI scans skills & sections<br><br>
+        3️⃣ Get field prediction, gap analysis,
+        salary ranges &amp; curated courses<br><br>
+        4️⃣ Track progress over time
     </div>""", unsafe_allow_html=True)
 
 # ── Hero ──────────────────────────────────────────
 st.markdown("""
 <div class="hero-banner">
-    <div class="hero-title">AI Resume Analyser Ultra Pro</div>
+    <div class="hero-title">AI Resume Analyser</div>
     <p class="hero-sub">
-        Multi-engine NLP parsing &nbsp;·&nbsp; Fuzzy skill matching &nbsp;·&nbsp;
-        ATS compatibility &nbsp;·&nbsp; Career roadmaps &nbsp;·&nbsp; Salary benchmarks
+        Real-world skill gap analysis &nbsp;·&nbsp; Market salary benchmarks &nbsp;·&nbsp;
+        ATS compatibility &nbsp;·&nbsp; Career roadmaps
     </p>
 </div>""", unsafe_allow_html=True)
 
@@ -975,50 +737,39 @@ st.markdown("""
 # CANDIDATE
 # ══════════════════════════════════════════════════
 if "👤" in mode:
-    pdf_file = st.file_uploader("📄 Drop your resume here (PDF)",
-        type=["pdf"],
-        help="Supports any template — fancy columns, icons, custom fonts, two-column layouts.")
+    pdf_file = st.file_uploader("📄 Drop your resume here (PDF)", type=["pdf"],
+        help="Text-based PDF works best. Scanned images may give incomplete results.")
 
     if pdf_file:
         save_path = os.path.join("Uploaded_Resumes", pdf_file.name)
         with open(save_path, "wb") as f:
             f.write(pdf_file.getbuffer())
 
-        with st.spinner("🔍 Running multi-engine NLP analysis…"):
-            data = parse_resume(save_path)
-            raw  = data["_raw"]
+        with st.spinner("🔍 Analysing your resume…"):
+            data = parse_resume(save_path); raw  = data["_raw"]
+            load_nlp()
 
-        field = detect_field({s.lower() for s in data["skills"] + data.get("fuzzy_skills",[])})
+        field = detect_field({s.lower() for s in data["skills"]})
         sec_score, checks = resume_section_score(raw)
-        all_user_skills = data["skills"] + data.get("fuzzy_skills", [])
         skill_pct, matched_core, missing_core = (
-            score_skills_for_field({s.lower() for s in all_user_skills}, field)
+            score_skills_for_field({s.lower() for s in data["skills"]}, field)
             if field else (0, [], []))
         ats  = ats_score(raw, field)
         pages = data["no_of_pages"]
         cand_level = "Fresher" if pages==1 else "Intermediate" if pages==2 else "Experienced"
 
-        # Engine badge
-        engine_label = data.get("parse_engine", "unknown")
-        st.markdown(
-            f'<div style="margin-bottom:16px;color:#6b7280;font-size:.82rem;">'
-            f'Parsed with <span class="engine-badge">{engine_label}</span>'
-            f'{"  ·  Fuzzy matches: " + str(len(data.get("fuzzy_skills",[]))) if data.get("fuzzy_skills") else ""}'
-            f'</div>', unsafe_allow_html=True)
-
         # KPI strip
         cols = st.columns(5)
         for col, num, lbl in zip(cols,
-            [len(all_user_skills), f"{sec_score}%", f"{ats}%", pages, cand_level],
+            [len(data["skills"]), f"{sec_score}%", f"{ats}%", pages, cand_level],
             ["Skills Detected","Resume Score","ATS Score","Pages","Experience Level"]):
             col.markdown(f'<div class="stat-card"><div class="stat-number">{num}</div>'
                          f'<div class="stat-label">{lbl}</div></div>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
         # Tabs
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            "📋 Profile", "📊 Skill Gap", "🗺️ Roadmap",
-            "📚 Courses", "🎥 Videos", "🔬 NLP Debug"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📋 Profile", "📊 Skill Gap", "🗺️ Roadmap", "📚 Courses", "🎥 Videos"])
 
         # ── TAB 1: Profile ──────────────────────
         with tab1:
@@ -1029,29 +780,15 @@ if "👤" in mode:
                 st.write(f"**Name:** {data['name']}")
                 st.write(f"**Email:** {data['email']}")
                 st.write(f"**Phone:** {data['mobile_number']}")
-                if data.get('linkedin'):
-                    st.write(f"**LinkedIn:** [{data['linkedin']}]({data['linkedin']})")
-                if data.get('github'):
-                    st.write(f"**GitHub:** [{data['github']}]({data['github']})")
                 st.write(f"**Pages:** {pages}  ·  **Level:** {cand_level}")
                 if field: st.write(f"**Predicted Field:** {field}")
                 st.markdown("---")
-
-                st.markdown("**✅ Skills found (exact match):**")
+                st.markdown("**Skills found in your resume:**")
                 pills = " ".join(f'<span class="skill-pill pill-have">{s.title()}</span>'
                                  for s in data["skills"][:30])
                 st.markdown(pills or "_No skills detected._", unsafe_allow_html=True)
-
-                if data.get("fuzzy_skills"):
-                    st.markdown("<br>**🟡 Likely skills (fuzzy / OCR match):**",
-                                unsafe_allow_html=True)
-                    fp = " ".join(f'<span class="skill-pill pill-fuzzy">{s.title()}</span>'
-                                   for s in data["fuzzy_skills"][:15])
-                    st.markdown(fp, unsafe_allow_html=True)
-                    st.caption("These were matched via typo-tolerance — verify in your resume.")
-
                 if missing_core:
-                    st.markdown("<br>**🔴 High-priority skills to add:**", unsafe_allow_html=True)
+                    st.markdown("<br>**High-priority skills to add:**", unsafe_allow_html=True)
                     mp = " ".join(f'<span class="skill-pill pill-need">{s}</span>'
                                   for s in missing_core[:12])
                     st.markdown(mp, unsafe_allow_html=True)
@@ -1059,8 +796,7 @@ if "👤" in mode:
 
             with col_b:
                 st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                st.markdown('<div class="section-title">📈 Score Dashboard</div>',
-                            unsafe_allow_html=True)
+                st.markdown('<div class="section-title">📈 Score Dashboard</div>', unsafe_allow_html=True)
                 g1, g2 = st.columns(2)
                 g1.plotly_chart(gauge(sec_score, "Resume Quality"), use_container_width=True)
                 g2.plotly_chart(gauge(ats, "ATS Readiness"),        use_container_width=True)
@@ -1071,8 +807,7 @@ if "👤" in mode:
 
             # Checklist
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            st.markdown('<div class="section-title">✅ Resume Section Checklist</div>',
-                        unsafe_allow_html=True)
+            st.markdown('<div class="section-title">✅ Resume Section Checklist</div>', unsafe_allow_html=True)
             for ch in checks:
                 icon  = "✅" if ch["found"] else "❌"
                 colour= "#10b981" if ch["found"] else "#ef4444"
@@ -1110,35 +845,31 @@ if "👤" in mode:
         # ── TAB 2: Skill Gap ────────────────────
         with tab2:
             if not field:
-                st.info("No specific field detected. Add more technical keywords.")
+                st.info("No specific field detected. Add more technical keywords to your resume.")
             else:
                 st.markdown(f"### Skill Gap Analysis for **{field}**")
                 st.caption("Pink = your current level  ·  Purple = market demand")
                 rc, bc = st.columns([1, 1])
                 with rc:
-                    st.plotly_chart(
-                        radar_chart({s.lower() for s in all_user_skills}, field),
-                        use_container_width=True)
+                    st.plotly_chart(radar_chart({s.lower() for s in data["skills"]}, field),
+                                    use_container_width=True)
                 with bc:
-                    st.plotly_chart(
-                        skill_gap_bar({s.lower() for s in all_user_skills}, field),
-                        use_container_width=True)
+                    st.plotly_chart(skill_gap_bar({s.lower() for s in data["skills"]}, field),
+                                    use_container_width=True)
 
                 rows = []
                 for skill, w in FIELD_PROFILES[field]["core_skills"]:
-                    us = {x.lower() for x in all_user_skills}
-                    match = any(skill.lower() in s or s in skill.lower() for s in us)
-                    fuzzy_hit = skill in data.get("fuzzy_skills", [])
+                    match = any(skill.lower() in s or s in skill.lower()
+                                for s in {x.lower() for x in data["skills"]})
                     rows.append({"Skill": skill, "Market Weight": w,
-                                 "Status": "✅ Have" if match else ("🟡 Fuzzy" if fuzzy_hit else "❌ Gap"),
+                                 "Status": "✅ Have" if match else "❌ Gap",
                                  "Priority": "HIGH" if w>=8 else "MEDIUM" if w>=6 else "LOW"})
                 df_gap = pd.DataFrame(rows)
                 st.markdown("#### Detailed Skill Breakdown")
                 st.dataframe(
                     df_gap.style
                     .map(lambda v: "color:#10b981" if "Have" in str(v) else
-                            ("color:#ef4444" if "Gap" in str(v) else
-                             "color:#fbbf24"), subset=["Status"])
+                            ("color:#ef4444" if "Gap" in str(v) else ""), subset=["Status"])
                     .map(lambda v: "color:#f59e0b;font-weight:600" if v=="HIGH" else "",
                             subset=["Priority"]),
                     use_container_width=True, hide_index=True)
@@ -1152,10 +883,12 @@ if "👤" in mode:
         # ── TAB 3: Roadmap ──────────────────────
         with tab3:
             if not field:
-                st.info("Add technical keywords to unlock your personalised roadmap.")
+                st.info("Add technical keywords to your resume to unlock your personalised roadmap.")
             else:
                 st.markdown(f"### 🗺️ Career Roadmap — {field}")
+                st.caption("Your path from current skills to market-ready.")
                 st.plotly_chart(roadmap_chart(field), use_container_width=True)
+
                 steps = FIELD_PROFILES[field]["roadmap"]
                 cols  = st.columns(3)
                 for i, (period, task) in enumerate(steps):
@@ -1164,7 +897,8 @@ if "👤" in mode:
                         <div class="section-card" style="padding:16px 18px;margin-bottom:12px;">
                             <div style="color:{COLORS[i%len(COLORS)]};font-weight:700;
                                         font-size:.78rem;letter-spacing:.06em;margin-bottom:6px;">
-                                {period}</div>
+                                {period}
+                            </div>
                             <div style="color:#c8cfe0;font-size:.88rem;line-height:1.45;">{task}</div>
                         </div>""", unsafe_allow_html=True)
 
@@ -1172,7 +906,7 @@ if "👤" in mode:
                 kws = FIELD_PROFILES[field]["ats_keywords"]; tl = raw.lower()
                 for kw in kws:
                     present = kw in tl
-                    bc2     = "#10b981" if present else "#ef4444"
+                    bc2 = "#10b981" if present else "#ef4444"
                     status  = "In resume ✓" if present else "Missing ✗"
                     st.markdown(
                         f'<span class="skill-pill" style="background:rgba(0,0,0,.3);'
@@ -1210,44 +944,14 @@ if "👤" in mode:
                 st.caption(f"▶ {get_yt_title(ivid)}")
                 st.video(ivid)
 
-        # ── TAB 6: NLP Debug ────────────────────
-        with tab6:
-            st.markdown("### 🔬 NLP Parse Diagnostics")
-            st.caption("Transparency panel — shows exactly what the parser extracted.")
-
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"**Parse Engine:** `{engine_label}`")
-                st.markdown(f"**Page Count:** `{pages}`")
-                st.markdown(f"**Extracted Name:** `{data['name']}`")
-                st.markdown(f"**Email:** `{data['email']}`")
-                st.markdown(f"**Phone:** `{data['mobile_number']}`")
-                st.markdown(f"**LinkedIn:** `{data.get('linkedin','—')}`")
-                st.markdown(f"**GitHub:** `{data.get('github','—')}`")
-                st.markdown(f"**Exact Skills Found:** `{len(data['skills'])}`")
-                st.markdown(f"**Fuzzy Skills Found:** `{len(data.get('fuzzy_skills',[]))}`")
-
-            with c2:
-                if data.get("fuzzy_skills"):
-                    st.markdown("**Fuzzy-matched skills:**")
-                    for s in data["fuzzy_skills"]:
-                        st.markdown(
-                            f'<span class="skill-pill pill-fuzzy">{s}</span>',
-                            unsafe_allow_html=True)
-
-            with st.expander("📝 Raw extracted text (first 3000 chars)"):
-                st.markdown(f'<div class="nlp-debug">{raw[:3000].replace("<","&lt;")}</div>',
-                            unsafe_allow_html=True)
-
-        # ── Save ──────────────────────────────────────────────────────
+        # ── Save ──────────────────────────────────
         ts = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
         insert_data(
             data['name'], data['email'], sec_score, ats, ts, pages,
             field or "Unknown", cand_level, data['skills'],
             missing_core[:8] if field else [],
             [c for c,_ in (FIELD_PROFILES[field]["courses"] if field else [])[:5]],
-            engine=engine_label,
-            fuzzy=str(data.get("fuzzy_skills", []))
+            make_resume_hash(raw)
         )
 
 # ══════════════════════════════════════════════════
@@ -1261,7 +965,7 @@ else:
         submitted = st.form_submit_button("Login")
 
     if submitted:
-        if u == "admin" and p == "admin123":
+        if u == "admin" and p == "admin123":   # ← change before deploying
             st.success("Welcome, Admin! 👋")
             conn = get_conn()
             df   = pd.read_sql_query("SELECT * FROM user_data", conn)
@@ -1275,9 +979,9 @@ else:
                 df['skills_count'] = pd.to_numeric(df['skills_count'], errors='coerce')
 
                 k1,k2,k3,k4 = st.columns(4)
-                k1.metric("Total Candidates",   len(df))
-                k2.metric("Avg Resume Score",   f"{df['resume_score'].mean():.0f}%")
-                k3.metric("Avg ATS Score",      f"{df['ats_score'].mean():.0f}%")
+                k1.metric("Total Candidates",  len(df))
+                k2.metric("Avg Resume Score",  f"{df['resume_score'].mean():.0f}%")
+                k3.metric("Avg ATS Score",     f"{df['ats_score'].mean():.0f}%")
                 k4.metric("Avg Skills / Resume",f"{df['skills_count'].mean():.1f}")
 
                 st.markdown("---")
@@ -1291,6 +995,7 @@ else:
                                  color_discrete_sequence=COLORS, hole=0.45)
                     fig.update_layout(**BASE_LAYOUT)
                     st.plotly_chart(fig, use_container_width=True)
+
                 with r1c2:
                     st.subheader("Experience Levels")
                     lc = df['User_level'].value_counts().reset_index()
@@ -1311,6 +1016,7 @@ else:
                         xaxis=dict(gridcolor='#1e2235', title='Score (%)'),
                         yaxis=dict(gridcolor='#1e2235', title='Count'))
                     st.plotly_chart(fig, use_container_width=True)
+
                 with r2c2:
                     st.subheader("ATS Score Distribution")
                     fig = px.histogram(df, x='ats_score', nbins=10,
@@ -1330,6 +1036,7 @@ else:
                         xaxis=dict(gridcolor='#1e2235', title='Resume Score'),
                         yaxis=dict(gridcolor='#1e2235', title='ATS Score'))
                     st.plotly_chart(fig, use_container_width=True)
+
                 with r3c2:
                     st.subheader("Submissions Over Time")
                     df['date'] = pd.to_datetime(df['Timestamp'].str[:10], errors='coerce')
@@ -1339,18 +1046,6 @@ else:
                     fig.update_layout(**BASE_LAYOUT,
                         xaxis=dict(gridcolor='#1e2235'),
                         yaxis=dict(gridcolor='#1e2235', title='Submissions'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                # Parse engine breakdown (new)
-                if 'parse_engine' in df.columns:
-                    st.subheader("PDF Parse Engine Usage")
-                    ec = df['parse_engine'].value_counts().reset_index()
-                    ec.columns = ['Engine','Count']
-                    fig = px.bar(ec, x='Engine', y='Count',
-                                 color='Engine', color_discrete_sequence=COLORS)
-                    fig.update_layout(**BASE_LAYOUT,
-                        xaxis=dict(gridcolor='#1e2235'),
-                        yaxis=dict(gridcolor='#1e2235'))
                     st.plotly_chart(fig, use_container_width=True)
 
                 st.markdown("### 📋 Full Data Table")
