@@ -3,8 +3,8 @@
 # 🎯 AI Resume Analyser Pro
 ### *Next-Generation NLP & Multi-Engine ATS Resume Intelligence Platform*
 
-[![Live Demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-resume-analyser-pro.pages.dev)
-[![Cloudflare Pages](https://img.shields.io/badge/Cloudflare%20Pages-Live-F38020.svg?logo=cloudflare&logoColor=white)](https://ai-resume-analyser-pro.pages.dev)
+[![Live Demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-resume-analyser-pro.ahadahmed786921.workers.dev/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Edge-Live-F38020.svg?logo=cloudflare&logoColor=white)](https://ai-resume-analyser-pro.ahadahmed786921.workers.dev/)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32%2B-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![spaCy](https://img.shields.io/badge/spaCy-NLP-09A3D5.svg?logo=spacy&logoColor=white)](https://spacy.io/)
@@ -16,7 +16,7 @@
   <b>A comprehensive, AI-powered resume parsing and ATS evaluation system designed to extract skills, calculate weighted ATS compatibility scores, detect candidate domain proficiency, and recommend targeted career roadmaps.</b>
 </p>
 
-🔗 **Live Cloudflare Pages URL:** [**https://ai-resume-analyser-pro.pages.dev**](https://ai-resume-analyser-pro.pages.dev)  
+🔗 **Live Cloudflare Deployment:** [**https://ai-resume-analyser-pro.ahadahmed786921.workers.dev/**](https://ai-resume-analyser-pro.ahadahmed786921.workers.dev/)  
 🔗 **Streamlit Community Cloud:** [**https://ai-resume-analyser-pro.streamlit.app/**](https://ai-resume-analyser-pro.streamlit.app/)
 
 <p align="center">
@@ -31,7 +31,7 @@
 
 ## 🌐 Live Deployments
 
-- ⚡ **Cloudflare Pages (Client-Side & Edge Ready):** [**https://ai-resume-analyser-pro.pages.dev**](https://ai-resume-analyser-pro.pages.dev)
+- ⚡ **Cloudflare Edge Deployment:** [**https://ai-resume-analyser-pro.ahadahmed786921.workers.dev/**](https://ai-resume-analyser-pro.ahadahmed786921.workers.dev/)
 - 🐍 **Streamlit Cloud (Full Python Backend):** [**https://ai-resume-analyser-pro.streamlit.app/**](https://ai-resume-analyser-pro.streamlit.app/)
 
 ---
