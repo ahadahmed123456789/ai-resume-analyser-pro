@@ -48,79 +48,152 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
 
+/* ══════════════════════════════════════════════════
+   GLOBAL CUSTOM CSS & ANIMATIONS — Cyber-Editorial
+   ══════════════════════════════════════════════════ */
+@keyframes floatOrb {
+    0% { transform: translateY(0px) scale(1); }
+    100% { transform: translateY(25px) scale(1.08); }
+}
+@keyframes pulseIcon {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(99,102,241,0.5)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 20px rgba(236,72,153,0.7)); }
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes borderGlow {
+    0%, 100% { border-color: rgba(99,102,241,0.3); }
+    50% { border-color: rgba(236,72,153,0.5); }
+}
+
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 .main { background: #0d0f1a; }
 section[data-testid="stSidebar"] { background: #090b14 !important; border-right: 1px solid #1e2235; }
 section[data-testid="stSidebar"] * { color: #c8cfe0 !important; }
 
 .hero-banner {
-    background: linear-gradient(135deg,#0d0f1a 0%,#141728 50%,#0d0f1a 100%);
-    border: 1px solid #1e2235; border-radius: 16px;
+    background: linear-gradient(135deg,rgba(13,15,26,0.95) 0%,rgba(20,23,40,0.85) 50%,rgba(13,15,26,0.95) 100%);
+    border: 1px solid #1e2235; border-radius: 18px;
     padding: 48px 40px; margin-bottom: 32px; position: relative; overflow: hidden;
+    animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.45);
 }
 .hero-banner::before {
     content:''; position:absolute; top:-80px; right:-80px;
-    width:300px; height:300px;
-    background:radial-gradient(circle,rgba(99,102,241,.15) 0%,transparent 70%); border-radius:50%;
+    width:320px; height:320px;
+    background:radial-gradient(circle,rgba(99,102,241,.22) 0%,transparent 70%); border-radius:50%;
+    animation: floatOrb 8s ease-in-out infinite alternate;
 }
 .hero-title {
     font-family:'DM Serif Display',serif; font-size:3rem;
-    background:linear-gradient(135deg,#e2e8f0,#6366f1,#ec4899);
+    background:linear-gradient(135deg,#e2e8f0 10%,#818cf8 50%,#ec4899 90%);
     -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-    background-clip:text; line-height:1.1; margin:0 0 12px;
+    background-clip:text; line-height:1.15; margin:0 0 12px;
 }
-.hero-sub { color:#8892a4; font-size:1.05rem; font-weight:300; margin:0; }
+.hero-sub { color:#8892a4; font-size:1.05rem; font-weight:300; margin:0; line-height:1.6; }
 
 .stat-card {
-    background:#141728; border:1px solid #1e2235; border-radius:12px;
-    padding:20px 24px; text-align:center; transition:border-color .2s;
+    background:rgba(20,23,40,0.7); backdrop-filter: blur(8px);
+    border:1px solid #1e2235; border-radius:14px;
+    padding:20px 24px; text-align:center;
+    transition:all .25s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: fadeInUp 0.5s ease-out;
 }
-.stat-card:hover { border-color:#6366f1; }
+.stat-card:hover {
+    border-color:#6366f1 !important;
+    transform: translateY(-5px) !important;
+    box-shadow: 0 8px 24px rgba(99,102,241,0.3) !important;
+}
 .stat-number { font-family:'DM Serif Display',serif; font-size:2.2rem; color:#6366f1; margin:0; }
-.stat-label  { color:#8892a4; font-size:.82rem; margin:4px 0 0; letter-spacing:.08em; text-transform:uppercase; }
+.stat-label  { color:#8892a4; font-size:.82rem; margin:4px 0 0; letter-spacing:.08em; text-transform:uppercase; font-weight: 600; }
 
 .section-card {
-    background:#141728; border:1px solid #1e2235; border-radius:14px;
+    background:rgba(20,23,40,0.75); backdrop-filter: blur(10px);
+    border:1px solid #1e2235; border-radius:16px;
     padding:28px 32px; margin-bottom:24px;
+    transition:all .25s ease;
+    animation: fadeInUp 0.6s ease-out;
+}
+.section-card:hover {
+    border-color: rgba(99,102,241,0.4) !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35) !important;
 }
 .section-title {
-    font-family:'DM Serif Display',serif; font-size:1.4rem; color:#e2e8f0;
+    font-family:'DM Serif Display',serif; font-size:1.45rem; color:#e2e8f0;
     margin:0 0 20px; padding-bottom:12px; border-bottom:1px solid #1e2235;
 }
 
-.skill-pill { display:inline-block; padding:4px 12px; border-radius:999px; font-size:.78rem; margin:3px; font-weight:500; }
-.pill-have  { background:rgba(99,102,241,.15); color:#818cf8; border:1px solid rgba(99,102,241,.3); }
-.pill-need  { background:rgba(236,72,153,.12); color:#f472b6; border:1px solid rgba(236,72,153,.25); }
+.skill-pill {
+    display:inline-block; padding:5px 14px; border-radius:999px;
+    font-size:.80rem; margin:4px; font-weight:500;
+    transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.skill-pill:hover {
+    transform: translateY(-3px) scale(1.05);
+}
+.pill-have  { background:rgba(99,102,241,.18); color:#818cf8; border:1px solid rgba(99,102,241,.35); box-shadow: 0 2px 8px rgba(99,102,241,0.15); }
+.pill-need  { background:rgba(236,72,153,.15); color:#f472b6; border:1px solid rgba(236,72,153,.3); box-shadow: 0 2px 8px rgba(236,72,153,0.15); }
 
-.check-row { display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid #1a1e30; }
+.check-row { display:flex; align-items:flex-start; gap:14px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
 .check-row:last-child { border-bottom:none; }
-.check-icon { font-size:1.1rem; flex-shrink:0; margin-top:1px; }
-.check-text { color:#c8cfe0; font-size:.92rem; line-height:1.4; }
-.check-tip  { color:#6b7280; font-size:.80rem; margin-top:2px; }
+.check-icon { font-size:1.2rem; flex-shrink:0; margin-top:1px; }
+.check-text { color:#c8cfe0; font-size:.95rem; line-height:1.4; }
+.check-tip  { color:#6b7280; font-size:.82rem; margin-top:3px; }
 
 .salary-badge {
-    background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(236,72,153,.15));
-    border:1px solid rgba(99,102,241,.3); border-radius:10px; padding:16px 20px; margin-bottom:12px;
+    background:linear-gradient(135deg,rgba(99,102,241,.18),rgba(236,72,153,.12));
+    border:1px solid rgba(99,102,241,.3); border-radius:12px;
+    padding:16px 20px; margin-bottom:12px;
+    transition: all .2s ease;
+}
+.salary-badge:hover {
+    transform: translateX(6px);
+    border-color: #6366f1;
+    box-shadow: 0 4px 16px rgba(99,102,241,0.2);
 }
 .salary-role  { color:#c8cfe0; font-weight:600; font-size:.95rem; }
-.salary-range { color:#818cf8; font-size:1.1rem; font-weight:700; margin-top:4px; }
+.salary-range { color:#818cf8; font-size:1.15rem; font-weight:700; margin-top:4px; }
 .salary-meta  { color:#6b7280; font-size:.78rem; margin-top:2px; }
 
 .stButton > button {
     background:linear-gradient(135deg,#6366f1,#8b5cf6) !important;
-    color:#fff !important; border:none !important; border-radius:8px !important;
-    font-weight:500 !important; padding:10px 28px !important;
+    color:#fff !important; border:none !important; border-radius:10px !important;
+    font-weight:600 !important; padding:12px 28px !important;
+    transition: all .2s ease !important;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.3) !important;
+}
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 24px rgba(99,102,241,0.45) !important;
 }
 .stProgress > div > div > div > div { background:linear-gradient(90deg,#6366f1,#ec4899) !important; }
-div[data-testid="stMetric"] { background:#141728; border:1px solid #1e2235; border-radius:10px; padding:14px 18px; }
-div[data-testid="stMetric"] label { color:#8892a4 !important; }
-div[data-testid="stMetric"] div   { color:#e2e8f0 !important; }
-[data-testid="stFileUploader"] { border:2px dashed #1e2235 !important; border-radius:12px !important; background:#0d0f1a !important; }
-[data-testid="stFileUploader"]:hover { border-color:#6366f1 !important; }
-.stTabs [data-baseweb="tab-list"] { background:#141728; border-radius:10px; padding:4px; gap:4px; }
-.stTabs [data-baseweb="tab"]      { background:transparent; color:#8892a4; border-radius:8px; font-size:.88rem; }
-.stTabs [aria-selected="true"]    { background:#6366f1 !important; color:#fff !important; }
-div[data-testid="stExpander"]     { background:#141728; border:1px solid #1e2235; border-radius:12px; }
+div[data-testid="stMetric"] {
+    background:rgba(20,23,40,0.7); backdrop-filter: blur(8px);
+    border:1px solid #1e2235; border-radius:12px; padding:16px 20px;
+    transition: all .2s ease;
+}
+div[data-testid="stMetric"]:hover {
+    border-color: #6366f1;
+    transform: translateY(-3px);
+}
+div[data-testid="stMetric"] label { color:#8892a4 !important; font-weight: 500; }
+div[data-testid="stMetric"] div   { color:#e2e8f0 !important; font-family: 'DM Serif Display', serif; }
+[data-testid="stFileUploader"] {
+    border:2px dashed #1e2235 !important; border-radius:16px !important;
+    background:rgba(13,15,26,0.8) !important;
+    transition: all .3s ease !important;
+}
+[data-testid="stFileUploader"]:hover {
+    border-color:#6366f1 !important;
+    box-shadow: 0 8px 24px rgba(99,102,241,0.2) !important;
+    transform: translateY(-2px);
+}
+.stTabs [data-baseweb="tab-list"] { background:rgba(20,23,40,0.8); border-radius:12px; padding:6px; gap:6px; }
+.stTabs [data-baseweb="tab"]      { background:transparent; color:#8892a4; border-radius:8px; font-size:.90rem; font-weight: 500; }
+.stTabs [aria-selected="true"]    { background:linear-gradient(135deg,#6366f1,#8b5cf6) !important; color:#fff !important; }
+div[data-testid="stExpander"]     { background:rgba(20,23,40,0.7); border:1px solid #1e2235; border-radius:14px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -959,99 +1032,115 @@ if "👤" in mode:
 # ══════════════════════════════════════════════════
 else:
     st.subheader("🔐 Admin Dashboard")
-    with st.form("login_form"):
-        u = st.text_input("Username")
-        p = st.text_input("Password", type='password')
-        submitted = st.form_submit_button("Login")
+    if "admin_logged_in" not in st.session_state:
+        st.session_state["admin_logged_in"] = False
 
-    if submitted:
-        if u == "admin" and p == "admin123":   # ← change before deploying
-            st.success("Welcome, Admin! 👋")
-            conn = get_conn()
-            df   = pd.read_sql_query("SELECT * FROM user_data", conn)
-            conn.close()
+    if not st.session_state["admin_logged_in"]:
+        with st.form("login_form"):
+            st.markdown("Enter your administrator credentials to access candidate telemetry.")
+            u = st.text_input("Username", placeholder="admin")
+            p = st.text_input("Password", type='password', placeholder="••••••••")
+            submitted = st.form_submit_button("Login")
 
-            if df.empty:
-                st.info("No submissions yet.")
+        if submitted:
+            if u == "admin" and p == "admin123":
+                st.session_state["admin_logged_in"] = True
+                st.success("Welcome, Admin! 👋")
+                st.rerun()
             else:
-                df['resume_score'] = pd.to_numeric(df['resume_score'], errors='coerce')
-                df['ats_score']    = pd.to_numeric(df['ats_score'],    errors='coerce')
-                df['skills_count'] = pd.to_numeric(df['skills_count'], errors='coerce')
+                st.error("❌ Incorrect username or password.")
+    else:
+        col_hdr1, col_hdr2 = st.columns([5, 1])
+        with col_hdr1:
+            st.markdown("### 📊 System Telemetry & Talent Analytics")
+        with col_hdr2:
+            if st.button("🚪 Logout"):
+                st.session_state["admin_logged_in"] = False
+                st.rerun()
 
-                k1,k2,k3,k4 = st.columns(4)
-                k1.metric("Total Candidates",  len(df))
-                k2.metric("Avg Resume Score",  f"{df['resume_score'].mean():.0f}%")
-                k3.metric("Avg ATS Score",     f"{df['ats_score'].mean():.0f}%")
-                k4.metric("Avg Skills / Resume",f"{df['skills_count'].mean():.1f}")
+        conn = get_conn()
+        df   = pd.read_sql_query("SELECT * FROM user_data", conn)
+        conn.close()
 
-                st.markdown("---")
-
-                r1c1, r1c2 = st.columns(2)
-                with r1c1:
-                    st.subheader("Field Distribution")
-                    fc = df['Predicted_Field'].value_counts().reset_index()
-                    fc.columns = ['Field','Count']
-                    fig = px.pie(fc, values='Count', names='Field',
-                                 color_discrete_sequence=COLORS, hole=0.45)
-                    fig.update_layout(**BASE_LAYOUT)
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with r1c2:
-                    st.subheader("Experience Levels")
-                    lc = df['User_level'].value_counts().reset_index()
-                    lc.columns = ['Level','Count']
-                    fig = px.bar(lc, x='Level', y='Count',
-                                 color='Level', color_discrete_sequence=COLORS)
-                    fig.update_layout(**BASE_LAYOUT,
-                        xaxis=dict(gridcolor='#1e2235'),
-                        yaxis=dict(gridcolor='#1e2235'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                r2c1, r2c2 = st.columns(2)
-                with r2c1:
-                    st.subheader("Resume Score Distribution")
-                    fig = px.histogram(df, x='resume_score', nbins=10,
-                                       color_discrete_sequence=['#6366f1'])
-                    fig.update_layout(**BASE_LAYOUT,
-                        xaxis=dict(gridcolor='#1e2235', title='Score (%)'),
-                        yaxis=dict(gridcolor='#1e2235', title='Count'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with r2c2:
-                    st.subheader("ATS Score Distribution")
-                    fig = px.histogram(df, x='ats_score', nbins=10,
-                                       color_discrete_sequence=['#ec4899'])
-                    fig.update_layout(**BASE_LAYOUT,
-                        xaxis=dict(gridcolor='#1e2235', title='ATS Score (%)'),
-                        yaxis=dict(gridcolor='#1e2235', title='Count'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                r3c1, r3c2 = st.columns(2)
-                with r3c1:
-                    st.subheader("Resume Score vs ATS Score")
-                    fig = px.scatter(df, x='resume_score', y='ats_score',
-                                     color='Predicted_Field', size='skills_count',
-                                     hover_data=['Name'], color_discrete_sequence=COLORS)
-                    fig.update_layout(**BASE_LAYOUT,
-                        xaxis=dict(gridcolor='#1e2235', title='Resume Score'),
-                        yaxis=dict(gridcolor='#1e2235', title='ATS Score'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with r3c2:
-                    st.subheader("Submissions Over Time")
-                    df['date'] = pd.to_datetime(df['Timestamp'].str[:10], errors='coerce')
-                    tl = df.groupby('date').size().reset_index(name='Count')
-                    fig = px.line(tl, x='date', y='Count',
-                                  color_discrete_sequence=['#10b981'], markers=True)
-                    fig.update_layout(**BASE_LAYOUT,
-                        xaxis=dict(gridcolor='#1e2235'),
-                        yaxis=dict(gridcolor='#1e2235', title='Submissions'))
-                    st.plotly_chart(fig, use_container_width=True)
-
-                st.markdown("### 📋 Full Data Table")
-                st.dataframe(df, use_container_width=True)
-                st.markdown(
-                    get_download_link(df, 'resume_data.csv', '⬇️ Download Full Report (CSV)'),
-                    unsafe_allow_html=True)
+        if df.empty:
+            st.info("No submissions yet.")
         else:
-            st.error("❌ Incorrect credentials.")
+            df['resume_score'] = pd.to_numeric(df['resume_score'], errors='coerce')
+            df['ats_score']    = pd.to_numeric(df['ats_score'],    errors='coerce')
+            df['skills_count'] = pd.to_numeric(df['skills_count'], errors='coerce')
+
+            k1,k2,k3,k4 = st.columns(4)
+            k1.metric("Total Candidates",  len(df))
+            k2.metric("Avg Resume Score",  f"{df['resume_score'].mean():.0f}%")
+            k3.metric("Avg ATS Score",     f"{df['ats_score'].mean():.0f}%")
+            k4.metric("Avg Skills / Resume",f"{df['skills_count'].mean():.1f}")
+
+            st.markdown("---")
+
+            r1c1, r1c2 = st.columns(2)
+            with r1c1:
+                st.subheader("Field Distribution")
+                fc = df['Predicted_Field'].value_counts().reset_index()
+                fc.columns = ['Field','Count']
+                fig = px.pie(fc, values='Count', names='Field',
+                             color_discrete_sequence=COLORS, hole=0.45)
+                fig.update_layout(**BASE_LAYOUT)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with r1c2:
+                st.subheader("Experience Levels")
+                lc = df['User_level'].value_counts().reset_index()
+                lc.columns = ['Level','Count']
+                fig = px.bar(lc, x='Level', y='Count',
+                             color='Level', color_discrete_sequence=COLORS)
+                fig.update_layout(**BASE_LAYOUT,
+                    xaxis=dict(gridcolor='#1e2235'),
+                    yaxis=dict(gridcolor='#1e2235'))
+                st.plotly_chart(fig, use_container_width=True)
+
+            r2c1, r2c2 = st.columns(2)
+            with r2c1:
+                st.subheader("Resume Score Distribution")
+                fig = px.histogram(df, x='resume_score', nbins=10,
+                                   color_discrete_sequence=['#6366f1'])
+                fig.update_layout(**BASE_LAYOUT,
+                    xaxis=dict(gridcolor='#1e2235', title='Score (%)'),
+                    yaxis=dict(gridcolor='#1e2235', title='Count'))
+                st.plotly_chart(fig, use_container_width=True)
+
+            with r2c2:
+                st.subheader("ATS Score Distribution")
+                fig = px.histogram(df, x='ats_score', nbins=10,
+                                   color_discrete_sequence=['#ec4899'])
+                fig.update_layout(**BASE_LAYOUT,
+                    xaxis=dict(gridcolor='#1e2235', title='ATS Score (%)'),
+                    yaxis=dict(gridcolor='#1e2235', title='Count'))
+                st.plotly_chart(fig, use_container_width=True)
+
+            r3c1, r3c2 = st.columns(2)
+            with r3c1:
+                st.subheader("Resume Score vs ATS Score")
+                fig = px.scatter(df, x='resume_score', y='ats_score',
+                                 color='Predicted_Field', size='skills_count',
+                                 hover_data=['Name'], color_discrete_sequence=COLORS)
+                fig.update_layout(**BASE_LAYOUT,
+                    xaxis=dict(gridcolor='#1e2235', title='Resume Score'),
+                    yaxis=dict(gridcolor='#1e2235', title='ATS Score'))
+                st.plotly_chart(fig, use_container_width=True)
+
+            with r3c2:
+                st.subheader("Submissions Over Time")
+                df['date'] = pd.to_datetime(df['Timestamp'].str[:10], errors='coerce')
+                tl = df.groupby('date').size().reset_index(name='Count')
+                fig = px.line(tl, x='date', y='Count',
+                              color_discrete_sequence=['#10b981'], markers=True)
+                fig.update_layout(**BASE_LAYOUT,
+                    xaxis=dict(gridcolor='#1e2235'),
+                    yaxis=dict(gridcolor='#1e2235', title='Submissions'))
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("### 📋 Full Data Table")
+            st.dataframe(df, use_container_width=True)
+            st.markdown(
+                get_download_link(df, 'resume_data.csv', '⬇️ Download Full Report (CSV)'),
+                unsafe_allow_html=True)

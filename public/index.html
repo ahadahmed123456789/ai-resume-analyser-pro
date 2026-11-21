@@ -872,9 +872,14 @@
         <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
         <div class="upload-title">Drop your resume here (PDF)</div>
         <div class="upload-hint">Upload a text-based PDF to generate instant ATS score and competency radar</div>
-        <button class="btn-primary" type="button" onclick="event.stopPropagation(); document.getElementById('resume-file').click()">
-          <i class="fa-solid fa-file-pdf"></i> Browse Resume File
-        </button>
+        <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 18px;">
+          <button class="btn-primary" type="button" onclick="event.stopPropagation(); document.getElementById('resume-file').click()" style="margin-top: 0;">
+            <i class="fa-solid fa-file-pdf"></i> Browse Resume File
+          </button>
+          <button class="btn-primary" type="button" onclick="event.stopPropagation(); loadDemoAnalysis()" style="margin-top: 0; background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(99, 102, 241, 0.25)); border: 1px solid rgba(236, 72, 153, 0.45); color: #f472b6;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> ⚡ Try Live Demo Preview
+          </button>
+        </div>
 
         <div class="progress-bar-container" id="progress-container">
           <div class="progress-bar" id="progress-bar"></div>
@@ -1522,6 +1527,53 @@
         progressContainer.style.display = 'none';
         statusText.style.display = 'none';
       }
+    }
+
+    function loadDemoAnalysis() {
+      const demoText = `Ahad Ahmed
+Bangalore, India | ahad.ai.dev@example.com | +91 9876543210
+LinkedIn: linkedin.com/in/ahadahmed | GitHub: github.com/ahadahmed123456789
+
+Career Objective:
+Passionate Data Scientist and Machine Learning enthusiast with strong foundations in Python, machine learning algorithms, deep learning neural networks, SQL, and statistical data visualization. Eager to solve real-world problems and optimize data pipelines.
+
+Education:
+Bachelor of Technology in Computer Science & Engineering
+GPA: 8.9 / 10 | Graduated 2026
+
+Technical Skills:
+Python, Machine Learning, Deep Learning, SQL, Statistics, Data Visualization, Pandas, NumPy, Scikit-learn, TensorFlow, PyTorch, Big Data, MLOps, NLP, Feature Engineering, A/B Testing, Git, Docker, Cloud (AWS/GCP), Tableau
+
+Work Experience & Internships:
+Machine Learning Intern — AI Research Labs (6 Months)
+- Built predictive regression and classification models using Scikit-learn and XGBoost, achieving 94% classification accuracy.
+- Performed exploratory data analysis (EDA) and data cleansing on over 1.2M rows using Pandas and SQL.
+- Deployed real-time inference microservices using Docker and FastAPI on cloud infrastructure.
+
+Projects:
+1. AI Resume Analyser Pro: Next-generation NLP parsing system extracting candidate skills, computing ATS compatibility, and rendering interactive Plotly radar charts.
+2. End-to-End Customer Analytics Pipeline: Feature engineering pipeline with automated A/B testing and interactive Streamlit analytics dashboards.
+
+Certifications:
+- Machine Learning Specialization by Andrew Ng (Coursera)
+- Deep Learning & TensorFlow Developer Certificate
+
+Achievements:
+- Ranked in Top 5% in National Data Science Hackathon.
+- Author of open-source Python data extraction utilities with 500+ GitHub stars.
+
+Hobbies & Extracurricular:
+Open-source software contributor, Tech blog writing, Competitive Chess.`;
+
+      runAnalysis(demoText, 2, "demo_candidate_resume.pdf");
+      confetti({
+        particleCount: 100,
+        spread: 80,
+        origin: { y: 0.55 },
+        colors: ['#6366f1', '#ec4899', '#10b981', '#f59e0b']
+      });
+      document.getElementById('results-view').style.display = 'block';
+      document.getElementById('results-view').scrollIntoView({ behavior: 'smooth' });
     }
 
     // ══════════════════════════════════════════════════
